@@ -1,17 +1,18 @@
-import 'package:crypto/crypto.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
+
   @override
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _userNameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
@@ -19,55 +20,49 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _isLoading = true; });
 
-    String username = _userNameController.text;
-    String password = _passwordController.text;
-
-    var bytes = utf8.encode(password); 
-    var digest = sha256.convert(bytes); 
+    final username = _emailController.text;
+    final password = _passwordController.text;
+    
+    var bytes = utf8.encode(password);
+    var digest = sha256.convert(bytes);
     String hashedPassword = digest.toString();
 
-    const serverHost = '10.0.2.2'; // se for fisico mudar para o IP do servidor
-    const serverPort = 12345;
-    String serverResponse = '';
+    final wsUrl = Uri.parse('ws://10.0.2.2:12345');
+    final channel = WebSocketChannel.connect(wsUrl);
 
-    try {
-      Socket socket = await Socket.connect(serverHost, serverPort, timeout: Duration(seconds: 5));
+    channel.stream.listen(
+      (message) {
+        final data = jsonDecode(message);
+        String feedbackMessage = "Ocorreu um erro.";
+        
+        if (data['type'] == 'auth_response') {
+          if (data['status'] == 'REGISTER_SUCCESS') {
+            feedbackMessage = "Usuário registado com sucesso!";
+            if(mounted) Navigator.pop(context); // Volta para a tela de login
+          } else if (data['status'] == 'REGISTER_FAILED:USERNAME_EXISTS') {
+            feedbackMessage = "Este username já está em uso.";
+          }
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(feedbackMessage)));
+        channel.sink.close();
+        if (mounted) setState(() { _isLoading = false; });
+      },
+      onError: (error) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao conectar ao servidor.')));
+        channel.sink.close();
+        if (mounted) setState(() { _isLoading = false; });
+      }
+    );
 
-      socket.write("REGISTER");
-      await Future.delayed(Duration(milliseconds: 100)); 
-
-      socket.write(username);
-      await Future.delayed(Duration(milliseconds: 100));
-      socket.write(hashedPassword);
-
-      await socket.listen((List<int> data) {
-        serverResponse = utf8.decode(data);
-      }).asFuture();
-      
-      socket.destroy();
-    } catch (e) {
-      serverResponse = "CONNECTION_ERROR";
-    } finally {
-      setState(() { _isLoading = false; });
-    }
-
-    String feedbackMessage;
-    if (serverResponse == 'REGISTER_SUCCESS') {
-      feedbackMessage = 'Usuário registado com sucesso! Agora pode fazer o login.';
-      if (mounted) Navigator.pop(context);
-    } else if (serverResponse == 'REGISTER_FAILED:USERNAME_EXISTS') {
-      feedbackMessage = 'Este nome de usuário já está em uso.';
-    } else {
-      feedbackMessage = 'Erro no registo. Tente novamente.';
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(feedbackMessage)),
-      );
-    }
+    final registerData = {
+      "type": "REGISTER",
+      "username": username,
+      "password_hash": hashedPassword,
+    };
+    channel.sink.add(jsonEncode(registerData));
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,16 +78,16 @@ class _RegisterPageState extends State<RegisterPage> {
               const Text('Crie a sua conta', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
               const SizedBox(height: 30),
               TextFormField(
-                controller: _userNameController,
-                decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.person_outlined)),
-                validator: (value) {return null; },
+                controller: _emailController,
+                decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.person_outline)),
+                validator: (value) => value!.isEmpty ? 'Por favor, insira um username' : null,
               ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _passwordController,
                 obscureText: true,
                 decoration: const InputDecoration(labelText: 'Senha', prefixIcon: Icon(Icons.lock_outline)),
-                validator: (value) {return null; },
+                validator: (value) => value!.length < 6 ? 'A senha deve ter pelo menos 6 caracteres' : null,
               ),
               const SizedBox(height: 30),
               _isLoading
