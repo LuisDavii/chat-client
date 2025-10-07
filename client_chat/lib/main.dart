@@ -1,7 +1,5 @@
-// lib/main.dart
-
 import 'package:flutter/material.dart';
-import 'package:client_chat/screens/login_page.dart'; // Importe a sua login page
+import 'package:client_chat/screens/login_page.dart'; 
 
 void main() {
   runApp(const MyApp());

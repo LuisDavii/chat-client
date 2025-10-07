@@ -30,6 +30,9 @@ class _HomePageState extends State<HomePage> {
 
   late final StreamSubscription _streamSubscription;
 
+  final Set<String> _typingUsers = {};
+  Timer? _typingTimer;
+
   @override
   void initState() {
     super.initState();
@@ -55,18 +58,53 @@ class _HomePageState extends State<HomePage> {
               )
               .toList();
         } else if (data['type'] == 'chat_message') {
+          final fromUser = data['from'];
           if (data['from'] == _currentChatPartner) {
             _messages.add(
               ChatMessage(from: data['from'], content: data['content']),
             );
+            _typingUsers.remove(fromUser);
+          }
+        } else if (data['type'] == 'TYPING_STATUS_UPDATE') {
+          final fromUser = data['from'];
+          final isTyping = data['isTyping'] as bool;
+
+          if (isTyping) {
+            _typingUsers.add(fromUser);
+          } else {
+            _typingUsers.remove(fromUser);
           }
         }
       });
     }
   }
 
+  void _onTextChanged(String text) {
+    if (_typingTimer?.isActive ?? false) _typingTimer?.cancel();
+
+    // Envia o status START_TYPING
+    if (_typingUsers.add(widget.username)) {
+      widget.sink.add(
+        jsonEncode({"type": "START_TYPING", "to": _currentChatPartner}),
+      );
+    }
+
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      widget.sink.add(
+        jsonEncode({"type": "STOP_TYPING", "to": _currentChatPartner}),
+      );
+      _typingUsers.remove(widget.username);
+    });
+  }
+
   void _sendMessage() {
     if (_controller.text.isNotEmpty && _currentChatPartner != null) {
+      _typingTimer?.cancel();
+
+      widget.sink.add(
+        jsonEncode({"type": "STOP_TYPING", "to": _currentChatPartner}),
+      );
+
       widget.sink.add(
         jsonEncode({
           "type": "chat_message",
@@ -74,11 +112,13 @@ class _HomePageState extends State<HomePage> {
           "content": _controller.text,
         }),
       );
+
       setState(() {
         _messages.add(
           ChatMessage(from: widget.username, content: _controller.text),
         );
       });
+
       _controller.clear();
     }
   }
@@ -94,15 +134,30 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _streamSubscription.cancel();
+    _typingTimer?.cancel();
     widget.sink.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool isPartnerTyping =
+        _currentChatPartner != null &&
+        _typingUsers.contains(_currentChatPartner);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_currentChatPartner ?? "Chat"),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_currentChatPartner ?? "Chat"),
+            if (isPartnerTyping)
+              Text(
+                'Digitando...',
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -117,6 +172,7 @@ class _HomePageState extends State<HomePage> {
       ),
       drawer: Drawer(
         child: ListView(
+          padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
               decoration: BoxDecoration(color: Theme.of(context).primaryColor),
@@ -125,32 +181,46 @@ class _HomePageState extends State<HomePage> {
                 style: const TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
-            ..._users
-                .where((u) => u.isOnline && u.username != widget.username)
-                .map(
-                  (user) => ListTile(
-                    leading: const Icon(
-                      Icons.circle,
-                      color: Colors.green,
-                      size: 14,
-                    ),
-                    title: Text(user.username),
-                    onTap: () => _startChatWith(user.username),
-                  ),
+            ..._users.where((u) => u.isOnline && u.username != widget.username).map((
+              user,
+            ) {
+              final bool isThisUserTyping = _typingUsers.contains(
+                user.username,
+              );
+
+              return ListTile(
+                leading: const Icon(
+                  Icons.circle,
+                  color: Colors.green,
+                  size: 14,
                 ),
+                title: Text(user.username),
+                subtitle: isThisUserTyping
+                    ? const Text(
+                        'digitando...',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey,
+                        ),
+                      )
+                    : null,
+                onTap: () => _startChatWith(user.username),
+              );
+            }),
+
             ..._users
-                .where((u) => !u.isOnline)
-                .map(
-                  (user) => ListTile(
-                    leading: Icon(
+                .where((u) => !u.isOnline && u.username != widget.username)
+                .map((user) {
+                  return ListTile(
+                    leading: const Icon(
                       Icons.circle_outlined,
                       color: Colors.grey,
                       size: 14,
                     ),
                     title: Text(user.username),
                     onTap: () => _startChatWith(user.username),
-                  ),
-                ),
+                  );
+                }),
           ],
         ),
       ),
@@ -204,6 +274,7 @@ class _HomePageState extends State<HomePage> {
                       Expanded(
                         child: TextField(
                           controller: _controller,
+                          onChanged: _onTextChanged,
                           decoration: InputDecoration(
                             hintText: 'Digite uma mensagem...',
                             border: OutlineInputBorder(
