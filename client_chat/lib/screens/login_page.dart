@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'home_page.dart';
 import 'register_page.dart';
+import 'package:client_chat/database_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -37,11 +38,14 @@ class _LoginPageState extends State<LoginPage> {
     final stream = channel.stream.asBroadcastStream();
 
     stream.listen(
-      (message) {
+      (message) async{
         final data = jsonDecode(message);
         if (data['type'] == 'auth_response') {
           if (data['status'] == 'LOGIN_SUCCESS') {
             if (mounted) {
+
+              await DatabaseHelper.instance.initForUser(username);
+
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(

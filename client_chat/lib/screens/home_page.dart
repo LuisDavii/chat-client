@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:client_chat/models/chat_models.dart';
 import 'login_page.dart';
+import 'package:client_chat/database_helper.dart';
 
 class HomePage extends StatefulWidget {
   final String username;
@@ -45,11 +46,28 @@ class _HomePageState extends State<HomePage> {
   }
 
   // processar todas as mensagens do servidor
-  void _handleServerMessage(dynamic message) {
+  void _handleServerMessage(dynamic message) async {
     final data = jsonDecode(message);
+
+    // Primeiro, processamos a mensagem e guardamos no banco de dados se necessário
+    if (data['type'] == 'chat_message') {
+      final receivedMessage = ChatMessage(
+        from: data['from'],
+        content: data['content'],
+      );
+      // Salva a mensagem recebida, independentemente de a conversa estar aberta
+      await DatabaseHelper.instance.insertMessage(
+        receivedMessage,
+        widget.username,
+      );
+    }
+
+    // Depois, atualizamos a interface do utilizador (UI) dentro de um único setState
     if (mounted) {
       setState(() {
-        if (data['type'] == 'user_list_update') {
+        final String type = data['type'];
+
+        if (type == 'user_list_update') {
           final List usersFromServer = data['users'];
           _users = usersFromServer
               .map(
@@ -59,15 +77,17 @@ class _HomePageState extends State<HomePage> {
                 ),
               )
               .toList();
-        } else if (data['type'] == 'chat_message') {
+        } else if (type == 'chat_message') {
           final fromUser = data['from'];
+          // Só adiciona a mensagem à UI se a conversa com aquele usuário estiver aberta
           if (fromUser == _currentChatPartner) {
             _messages.add(
               ChatMessage(from: fromUser, content: data['content']),
             );
+            // Se recebemos uma mensagem, a pessoa obviamente parou de digitar
             _typingUsers.remove(fromUser);
           }
-        } else if (data['type'] == 'TYPING_STATUS_UPDATE') {
+        } else if (type == 'TYPING_STATUS_UPDATE') {
           final fromUser = data['from'];
           final isTyping = data['isTyping'] as bool;
 
@@ -99,7 +119,7 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  void _sendMessage() {
+  void _sendMessage() async {
     if (_controller.text.isNotEmpty && _currentChatPartner != null) {
       _typingTimer?.cancel();
 
@@ -115,21 +135,34 @@ class _HomePageState extends State<HomePage> {
         }),
       );
 
+      final sentMessage = ChatMessage(
+        from: widget.username,
+        content: _controller.text,
+      );
+
+      await DatabaseHelper.instance.insertMessage(
+        sentMessage,
+        _currentChatPartner!,
+      );
+
       setState(() {
-        _messages.add(
-          ChatMessage(from: widget.username, content: _controller.text),
-        );
+        _messages.add(sentMessage);
       });
 
       _controller.clear();
     }
   }
 
-  void _startChatWith(String username) {
+  void _startChatWith(String username) async {
+    List<ChatMessage> history = await DatabaseHelper.instance
+        .getConversationHistory(widget.username, username);
+
     setState(() {
       _currentChatPartner = username;
       _messages.clear();
+      _messages.addAll(history);
     });
+
     Navigator.of(context).pop();
   }
 
@@ -183,30 +216,32 @@ class _HomePageState extends State<HomePage> {
                 style: const TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
-            ..._users.where((u) => u.isOnline && u.username != widget.username).map((user) {
-              final bool isThisUserTyping = _typingUsers.contains(
-                user.username,
-              );
+            ..._users
+                .where((u) => u.isOnline && u.username != widget.username)
+                .map((user) {
+                  final bool isThisUserTyping = _typingUsers.contains(
+                    user.username,
+                  );
 
-              return ListTile(
-                leading: const Icon(
-                  Icons.circle,
-                  color: Colors.green,
-                  size: 14,
-                ),
-                title: Text(user.username),
-                subtitle: isThisUserTyping
-                    ? const Text(
-                        'digitando...',
-                        style: TextStyle(
-                          fontStyle: FontStyle.italic,
-                          color: Colors.grey,
-                        ),
-                      )
-                    : null,
-                onTap: () => _startChatWith(user.username),
-              );
-            }),
+                  return ListTile(
+                    leading: const Icon(
+                      Icons.circle,
+                      color: Colors.green,
+                      size: 14,
+                    ),
+                    title: Text(user.username),
+                    subtitle: isThisUserTyping
+                        ? const Text(
+                            'digitando...',
+                            style: TextStyle(
+                              fontStyle: FontStyle.italic,
+                              color: Colors.grey,
+                            ),
+                          )
+                        : null,
+                    onTap: () => _startChatWith(user.username),
+                  );
+                }),
 
             ..._users
                 .where((u) => !u.isOnline && u.username != widget.username)
