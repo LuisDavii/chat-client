@@ -40,6 +40,8 @@ class _HomePageState extends State<HomePage> {
     _streamSubscription = widget.stream.listen(_handleServerMessage);
 
     widget.sink.add(jsonEncode({"type": "REQUEST_USER_LIST"}));
+
+    widget.sink.add(jsonEncode({"type": "REQUEST_OFFLINE_MESSAGES"}));
   }
 
   // processar todas as mensagens do servidor
@@ -59,9 +61,9 @@ class _HomePageState extends State<HomePage> {
               .toList();
         } else if (data['type'] == 'chat_message') {
           final fromUser = data['from'];
-          if (data['from'] == _currentChatPartner) {
+          if (fromUser == _currentChatPartner) {
             _messages.add(
-              ChatMessage(from: data['from'], content: data['content']),
+              ChatMessage(from: fromUser, content: data['content']),
             );
             _typingUsers.remove(fromUser);
           }
@@ -181,9 +183,7 @@ class _HomePageState extends State<HomePage> {
                 style: const TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
-            ..._users.where((u) => u.isOnline && u.username != widget.username).map((
-              user,
-            ) {
+            ..._users.where((u) => u.isOnline && u.username != widget.username).map((user) {
               final bool isThisUserTyping = _typingUsers.contains(
                 user.username,
               );
