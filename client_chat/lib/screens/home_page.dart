@@ -212,7 +212,7 @@ class _HomePageState extends State<HomePage> {
             DrawerHeader(
               decoration: BoxDecoration(color: Theme.of(context).primaryColor),
               child: Text(
-                'Usuários',
+                'Bem-vindo, ${widget.username}',
                 style: const TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
