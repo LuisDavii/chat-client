@@ -23,10 +23,6 @@ class _RegisterPageState extends State<RegisterPage> {
     final username = _emailController.text;
     final password = _passwordController.text;
     
-    var bytes = utf8.encode(password);
-    var digest = sha256.convert(bytes);
-    String hashedPassword = digest.toString();
-
     final wsUrl = Uri.parse('ws://10.0.2.2:12345');
     final channel = WebSocketChannel.connect(wsUrl);
 
@@ -58,7 +54,7 @@ class _RegisterPageState extends State<RegisterPage> {
     final registerData = {
       "type": "REGISTER",
       "username": username,
-      "password_hash": hashedPassword,
+      "password_hash": password,
     };
     channel.sink.add(jsonEncode(registerData));
   }

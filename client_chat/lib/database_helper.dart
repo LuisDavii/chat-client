@@ -13,11 +13,9 @@ class DatabaseHelper {
   static const columnConteudo = 'conteudo';
   static const columnTimestamp = 'timestamp';
 
-  // Torna esta classe um singleton
   DatabaseHelper._privateConstructor();
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
 
-  // Apenas uma referência à base de dados
   Database? _database;
   String? _currentUser;
 
@@ -27,7 +25,7 @@ class DatabaseHelper {
       return;
     }
     _currentUser = username;
-    // O nome do ficheiro agora inclui o nome do usuário
+    
     final dbName = 'Chat_${username}.db';
     String path = join(await getDatabasesPath(), dbName);
     _database = await openDatabase(path, version: 1, onCreate: _onCreate);

@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      // A tela inicial agora é importada de outro ficheiro
+     
       home: const LoginPage(),
     );
   }
