@@ -6,12 +6,13 @@ import 'package:client_chat/models/chat_models.dart';
 
 class DatabaseHelper {
 
-  static const table = 'conversas';
   static const columnId = '_id';
   static const columnRemetente = 'remetente';
   static const columnDestinatario = 'destinatario';
   static const columnConteudo = 'conteudo';
   static const columnTimestamp = 'timestamp';
+  static const _tableConversas = 'conversas';
+  static const _tableKeyStore = 'key_store';  
 
   DatabaseHelper._privateConstructor();
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
@@ -42,20 +43,50 @@ class DatabaseHelper {
   // SQL para criar a tabela
   Future _onCreate(Database db, int version) async {
     await db.execute('''
-          CREATE TABLE $table (
-            $columnId INTEGER PRIMARY KEY AUTOINCREMENT,
-            $columnRemetente TEXT NOT NULL,
-            $columnDestinatario TEXT NOT NULL,
-            $columnConteudo TEXT NOT NULL,
-            $columnTimestamp INTEGER NOT NULL
+          CREATE TABLE $_tableConversas (
+            _id INTEGER PRIMARY KEY AUTOINCREMENT,
+            remetente TEXT NOT NULL,
+            destinatario TEXT NOT NULL,
+            conteudo TEXT NOT NULL,
+            timestamp INTEGER NOT NULL
           )
           ''');
+    
+    // NOVO: Tabela para guardar as chaves (privada e pública)
+    await db.execute('''
+          CREATE TABLE $_tableKeyStore (
+            _id INTEGER PRIMARY KEY,
+            private_key TEXT NOT NULL,
+            public_key TEXT NOT NULL
+          )
+          ''');
+  }
+
+  Future<void> saveKeyPair(String privateKey, String publicKey) async {
+    Database db = await instance.database;
+    // Apaga chaves antigas e insere as novas. Usamos ID 1 fixo.
+    await db.delete(_tableKeyStore); 
+    await db.insert(_tableKeyStore, {
+      '_id': 1,
+      'private_key': privateKey,
+      'public_key': publicKey,
+    });
+    print("Par de chaves guardado localmente.");
+  }
+
+  Future<String?> getPrivateKey() async {
+    Database db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(_tableKeyStore, limit: 1);
+    if (maps.isNotEmpty) {
+      return maps.first['private_key'] as String;
+    }
+    return null;
   }
 
   // Método para inserir uma mensagem
   Future<int> insertMessage(ChatMessage message, String destinatario) async {
     Database db = await instance.database;
-    return await db.insert(table, {
+    return await db.insert(_tableConversas, {
       columnRemetente: message.from,
       columnDestinatario: destinatario,
       columnConteudo: message.content,
@@ -66,7 +97,7 @@ class DatabaseHelper {
   // Método para buscar o histórico de uma conversa entre dois usuários
   Future<List<ChatMessage>> getConversationHistory(String user1, String user2) async {
     Database db = await instance.database;
-    final List<Map<String, dynamic>> maps = await db.query(table,
+    final List<Map<String, dynamic>> maps = await db.query(_tableConversas,
         where: '($columnRemetente = ? AND $columnDestinatario = ?) OR ($columnRemetente = ? AND $columnDestinatario = ?)',
         whereArgs: [user1, user2, user2, user1],
         orderBy: '$columnTimestamp ASC');

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:crypto/crypto.dart';
 import 'dart:convert';
 
 import 'home_page.dart';
@@ -29,9 +28,6 @@ class _LoginPageState extends State<LoginPage> {
     final username = _emailController.text;
     final password = _passwordController.text;
 
-    var bytes = utf8.encode(password);
-    var digest = sha256.convert(bytes);
-    String hashedPassword = digest.toString();
 
     final wsUrl = Uri.parse('ws://10.0.2.2:12345');
     final channel = WebSocketChannel.connect(wsUrl);
@@ -90,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
     final loginData = {
       "type": "LOGIN",
       "username": username,
-      "password_hash": hashedPassword,
+      "password": password,
     };
     channel.sink.add(jsonEncode(loginData));
   }
